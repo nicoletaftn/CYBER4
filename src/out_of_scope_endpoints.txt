@@ -1,0 +1,12 @@
+# OWASP Juice Shop - Out of Scope Endpoints
+#
+# List one endpoint path per line. Partial paths are supported — the filter
+# performs a substring match, so "/#/contact" will block any URL or command
+# that contains that string (e.g. http://localhost:3000/#/contact).
+#
+# Lines starting with '#' and blank lines are ignored.
+
+# ── Customer / UI pages ───────────────────────────────────────────────────────
+/#/contact
+/#/about
+/#/photo-wall

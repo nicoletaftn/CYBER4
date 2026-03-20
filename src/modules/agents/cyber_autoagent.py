@@ -38,23 +38,139 @@ from strands.hooks.events import BeforeToolCallEvent  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-# Minimal tool router hook to map unknown tool names to the shell tool
-class _ToolRouterHook:
-    """BeforeToolCall hook that maps unknown tool names to the shell tool."""
 
-    def __init__(self, shell_tool: Any) -> None:
+# ---------------------------------------------------------------------------
+# Out-of-scope endpoint helpers
+# ---------------------------------------------------------------------------
+
+def _load_out_of_scope_endpoints(filepath: "str | Path") -> list[str]:
+    """Load out-of-scope endpoint paths from *filepath*.
+
+    Each non-blank, non-comment line is treated as an endpoint path fragment
+    (e.g. ``/#/contact``).  The file may live anywhere; a missing file is
+    silently ignored and returns an empty list.
+    """
+    try:
+        path = Path(filepath)
+        if not path.exists():
+            return []
+        lines = path.read_text(encoding="utf-8").splitlines()
+        return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Could not load out-of-scope endpoints from %s: %s", filepath, exc)
+        return []
+
+
+def _find_out_of_scope_endpoint(text: str, endpoints: list[str]) -> "str | None":
+    """Return the first endpoint from *endpoints* that is a substring of *text*, or ``None``."""
+    for endpoint in endpoints:
+        if endpoint in text:
+            return endpoint
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Tool router hook
+# ---------------------------------------------------------------------------
+
+class _ToolRouterHook:
+    """BeforeToolCall hook that:
+
+    1. Blocks tool calls whose inputs reference an out-of-scope endpoint by
+       redirecting them to the shell tool with a clear ``OUT_OF_SCOPE`` echo
+       message, so the agent receives feedback without actually hitting the
+       endpoint.
+    2. Routes any remaining *unknown* tool names to the shell tool, rebuilding
+       the CLI command from the tool name and its input parameters.
+    """
+
+    #: Fields inspected when scanning tool inputs for endpoint paths.
+    _SCAN_FIELDS: tuple[str, ...] = ("command", "url", "target", "host", "ip", "options", "code", "path")
+
+    def __init__(
+        self,
+        shell_tool: Any,
+        out_of_scope_file: "str | Path | None" = None,
+    ) -> None:
         self._shell_tool = shell_tool
+        self._out_of_scope_endpoints: list[str] = (
+            _load_out_of_scope_endpoints(out_of_scope_file) if out_of_scope_file else []
+        )
+        if self._out_of_scope_endpoints:
+            logger.info(
+                "Out-of-scope filter active: %d endpoints loaded from %s",
+                len(self._out_of_scope_endpoints),
+                out_of_scope_file,
+            )
 
     def register_hooks(self, registry) -> None:  # type: ignore[no-untyped-def]
         registry.add_callback(BeforeToolCallEvent, self._on_before_tool)
 
-    def _on_before_tool(self, event) -> None:  # type: ignore[no-untyped-def]
-        if getattr(event, "selected_tool", None) is not None:
-            return
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _block_command(self, endpoint: str) -> str:
+        """Return a shell echo command that informs the agent the call was blocked."""
+        return (
+            f"echo 'OUT_OF_SCOPE: endpoint \"{endpoint}\" is listed as out-of-scope "
+            f"and will not be tested. This action has been blocked.'"
+        )
+
+    def _check_and_block(self, event) -> bool:  # type: ignore[no-untyped-def]
+        """Inspect the tool call for out-of-scope endpoints.
+
+        If a match is found the event is mutated to run an echo-block command
+        via the shell tool and ``True`` is returned.  Otherwise returns
+        ``False`` without touching the event.
+        """
+        if not self._out_of_scope_endpoints:
+            return False
 
         tool_use = getattr(event, "tool_use", {}) or {}
         tool_name = str(tool_use.get("name", "")).strip()
+        raw_input = tool_use.get("input", {}) or {}
+
+        # Collect all string values from the input that may contain URLs/paths
+        fragments: list[str] = []
+        if isinstance(raw_input, dict):
+            for field in self._SCAN_FIELDS:
+                val = raw_input.get(field)
+                if val and isinstance(val, str):
+                    fragments.append(val)
+        elif isinstance(raw_input, str):
+            fragments.append(raw_input)
+
+        combined = " ".join(fragments)
+        blocked = _find_out_of_scope_endpoint(combined, self._out_of_scope_endpoints)
+        if blocked:
+            logger.warning(
+                "Tool call blocked — out-of-scope endpoint detected: %r (tool: %s)",
+                blocked,
+                tool_name,
+            )
+            event.selected_tool = self._shell_tool  # type: ignore[attr-defined]
+            tool_use["input"] = {"command": self._block_command(blocked)}
+            return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Hook callback
+    # ------------------------------------------------------------------
+
+    def _on_before_tool(self, event) -> None:  # type: ignore[no-untyped-def]
+        tool_use = getattr(event, "tool_use", {}) or {}
+        tool_name = str(tool_use.get("name", "")).strip()
         if not tool_name:
+            return
+
+        # ── Step 1: out-of-scope check (applies to ALL tools) ──────────────
+        if self._check_and_block(event):
+            return
+
+        # ── Step 2: routing for unknown tools ──────────────────────────────
+        # If the SDK already resolved the tool, nothing left to do.
+        if getattr(event, "selected_tool", None) is not None:
             return
 
         raw_input = tool_use.get("input", {})
@@ -873,8 +989,10 @@ Guidance and tool names in prompts are illustrative, not prescriptive. Always ch
         rebuild_interval=20,  # Rebuild every 20 steps
     )
 
-    # Tool router to prevent unknown-tool failures by routing to shell before execution
-    tool_router_hook = _ToolRouterHook(shell)
+    # Tool router: routes unknown tools to shell AND enforces the out-of-scope
+    # endpoint blocklist defined in out_of_scope_endpoints.txt at the project root.
+    _oos_file = Path(__file__).parents[2] / "out_of_scope_endpoints.txt"
+    tool_router_hook = _ToolRouterHook(shell, out_of_scope_file=_oos_file)
 
     hooks = [tool_router_hook, react_hooks, prompt_rebuild_hook]
 
