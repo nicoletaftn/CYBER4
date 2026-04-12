@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Tests for the out-of-scope endpoint filter built into _ToolRouterHook.
+Tests for the out-of-scope domain / subdomain filter built into _ToolRouterHook.
 
 Each test simulates the AI making a tool call "as the agent" and verifies
-whether the call is blocked/rewritten (out-of-scope) or passed through
+whether the call is blocked/rewritten (out-of-scope domain) or passed through
 unchanged (in-scope / normal routing).
 
-Current out_of_scope.txt [ENDPOINTS] entries:
-    /#/contact
-    /#/about
-    /#/photo-wall
+Current out_of_scope.txt [DOMAINS] entries:
+    admin.juice-shop.com
+    staging.juice-shop.com
+    internal.juice-shop.local
 """
 
 import types
@@ -24,11 +24,11 @@ from modules.agents import cyber_autoagent as ca
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
-# Mirrors the three entries currently in the [ENDPOINTS] section of out_of_scope.txt
-SAMPLE_ENDPOINTS = [
-    "/#/contact",
-    "/#/about",
-    "/#/photo-wall",
+# Mirrors the three entries currently in the [DOMAINS] section of out_of_scope.txt
+SAMPLE_DOMAINS = [
+    "admin.juice-shop.com",
+    "staging.juice-shop.com",
+    "internal.juice-shop.local",
 ]
 
 # Minimal valid file content with section headers for use in tmp-file tests
@@ -37,20 +37,20 @@ _OOS_FILE_CONTENT = (
     "\n"
     "[ENDPOINTS]\n"
     "/#/contact\n"
-    "  /#/about  \n"
-    "/#/photo-wall\n"
     "\n"
     "[DOMAINS]\n"
     "admin.juice-shop.com\n"
+    "  staging.juice-shop.com  \n"
+    "internal.juice-shop.local\n"
 )
 
 
-def _make_hook(endpoints: list[str] | None = None) -> ca._ToolRouterHook:
-    """Return a hook pre-loaded with *endpoints* (bypasses file I/O)."""
+def _make_hook(domains: list[str] | None = None) -> ca._ToolRouterHook:
+    """Return a hook pre-loaded with *domains* (bypasses file I/O)."""
     sentinel_shell = object()
     hook = ca._ToolRouterHook(shell_tool=sentinel_shell)
-    hook._out_of_scope_endpoints = endpoints if endpoints is not None else list(SAMPLE_ENDPOINTS)
-    hook._out_of_scope_domains = []
+    hook._out_of_scope_endpoints = []
+    hook._out_of_scope_domains = domains if domains is not None else list(SAMPLE_DOMAINS)
     hook._shell_tool = sentinel_shell
     return hook
 
@@ -67,82 +67,32 @@ def _make_event(
 
 
 # ---------------------------------------------------------------------------
-# _parse_oos_section unit tests
+# _load_out_of_scope_domains unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestParseOosSection:
+class TestLoadOutOfScopeDomains:
     def test_returns_empty_list_for_missing_file(self, tmp_path):
-        result = ca._parse_oos_section(tmp_path / "nonexistent.txt", "ENDPOINTS")
+        result = ca._load_out_of_scope_domains(tmp_path / "nonexistent.txt")
         assert result == []
 
-    def test_parses_endpoints_section(self, tmp_path):
+    def test_parses_domains_correctly(self, tmp_path):
         f = tmp_path / "oos.txt"
         f.write_text(_OOS_FILE_CONTENT)
-        result = ca._parse_oos_section(f, "ENDPOINTS")
-        assert result == ["/#/contact", "/#/about", "/#/photo-wall"]
-
-    def test_parses_domains_section(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text(_OOS_FILE_CONTENT)
-        result = ca._parse_oos_section(f, "DOMAINS")
-        assert result == ["admin.juice-shop.com"]
-
-    def test_unknown_section_returns_empty(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text(_OOS_FILE_CONTENT)
-        assert ca._parse_oos_section(f, "NONEXISTENT") == []
+        result = ca._load_out_of_scope_domains(f)
+        assert result == ["admin.juice-shop.com", "staging.juice-shop.com", "internal.juice-shop.local"]
 
     def test_ignores_blank_lines_and_comments(self, tmp_path):
         f = tmp_path / "oos.txt"
-        f.write_text("[ENDPOINTS]\n# only comments\n\n# another comment\n")
-        assert ca._parse_oos_section(f, "ENDPOINTS") == []
-
-    def test_returns_empty_for_empty_file(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text("")
-        assert ca._parse_oos_section(f, "ENDPOINTS") == []
-
-    def test_section_name_case_insensitive(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text("[endpoints]\n/#/contact\n")
-        assert ca._parse_oos_section(f, "ENDPOINTS") == ["/#/contact"]
-
-
-# ---------------------------------------------------------------------------
-# _load_out_of_scope_endpoints unit tests
-# ---------------------------------------------------------------------------
-
-
-class TestLoadOutOfScopeEndpoints:
-    def test_returns_empty_list_for_missing_file(self, tmp_path):
-        result = ca._load_out_of_scope_endpoints(tmp_path / "nonexistent.txt")
-        assert result == []
-
-    def test_parses_endpoints_correctly(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text(
-            "# comment\n"
-            "\n"
-            "[ENDPOINTS]\n"
-            "/#/contact\n"
-            "  /#/about  \n"
-            "/#/photo-wall\n"
-        )
-        result = ca._load_out_of_scope_endpoints(f)
-        assert result == ["/#/contact", "/#/about", "/#/photo-wall"]
-
-    def test_ignores_blank_lines_and_comments(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text("[ENDPOINTS]\n# only comments\n\n# another comment\n")
-        assert ca._load_out_of_scope_endpoints(f) == []
+        f.write_text("[DOMAINS]\n# only comments\n\n# another comment\n")
+        assert ca._load_out_of_scope_domains(f) == []
 
     def test_returns_empty_list_for_empty_file(self, tmp_path):
         f = tmp_path / "oos.txt"
         f.write_text("")
-        assert ca._load_out_of_scope_endpoints(f) == []
+        assert ca._load_out_of_scope_domains(f) == []
 
-    def test_does_not_bleed_into_domains_section(self, tmp_path):
+    def test_does_not_bleed_into_endpoints_section(self, tmp_path):
         f = tmp_path / "oos.txt"
         f.write_text(
             "[ENDPOINTS]\n"
@@ -150,129 +100,139 @@ class TestLoadOutOfScopeEndpoints:
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
         )
-        result = ca._load_out_of_scope_endpoints(f)
-        assert result == ["/#/contact"]
-        assert "admin.juice-shop.com" not in result
+        result = ca._load_out_of_scope_domains(f)
+        assert result == ["admin.juice-shop.com"]
+        assert "/#/contact" not in result
+
+    def test_no_domains_section_returns_empty(self, tmp_path):
+        f = tmp_path / "oos.txt"
+        f.write_text("[ENDPOINTS]\n/#/contact\n")
+        assert ca._load_out_of_scope_domains(f) == []
 
 
 # ---------------------------------------------------------------------------
-# _find_out_of_scope_endpoint unit tests
+# _find_out_of_scope_domain unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestFindOutOfScopeEndpoint:
-    def test_finds_contact_path_in_full_url(self):
-        url = "http://localhost:3000/#/contact"
-        result = ca._find_out_of_scope_endpoint(url, SAMPLE_ENDPOINTS)
-        assert result == "/#/contact"
+class TestFindOutOfScopeDomain:
+    def test_finds_admin_subdomain_in_full_url(self):
+        url = "http://admin.juice-shop.com/api/admin"
+        result = ca._find_out_of_scope_domain(url, SAMPLE_DOMAINS)
+        assert result == "admin.juice-shop.com"
 
-    def test_finds_about_inside_curl_command(self):
-        cmd = "curl -s 'http://juice-shop.local:3000/#/about'"
-        result = ca._find_out_of_scope_endpoint(cmd, SAMPLE_ENDPOINTS)
-        assert result == "/#/about"
+    def test_finds_staging_subdomain_inside_curl_command(self):
+        cmd = "curl -s 'https://staging.juice-shop.com/rest/products'"
+        result = ca._find_out_of_scope_domain(cmd, SAMPLE_DOMAINS)
+        assert result == "staging.juice-shop.com"
 
-    def test_finds_photo_wall_path(self):
-        cmd = "curl http://localhost:3000/#/photo-wall"
-        result = ca._find_out_of_scope_endpoint(cmd, SAMPLE_ENDPOINTS)
-        assert result == "/#/photo-wall"
+    def test_finds_internal_subdomain(self):
+        cmd = "nmap -sV internal.juice-shop.local"
+        result = ca._find_out_of_scope_domain(cmd, SAMPLE_DOMAINS)
+        assert result == "internal.juice-shop.local"
 
-    def test_returns_none_for_clean_url(self):
+    def test_returns_none_for_in_scope_domain(self):
         url = "http://localhost:3000/api/products"
-        result = ca._find_out_of_scope_endpoint(url, SAMPLE_ENDPOINTS)
+        result = ca._find_out_of_scope_domain(url, SAMPLE_DOMAINS)
         assert result is None
 
-    def test_returns_none_with_empty_endpoints_list(self):
-        result = ca._find_out_of_scope_endpoint("http://localhost:3000/#/contact", [])
+    def test_returns_none_with_empty_domains_list(self):
+        result = ca._find_out_of_scope_domain("http://admin.juice-shop.com", [])
         assert result is None
 
-    def test_returns_first_matching_endpoint(self):
-        # Command contains two out-of-scope endpoints; first in list should win
-        cmd = "curl http://localhost:3000/#/contact && curl http://localhost:3000/#/about"
-        result = ca._find_out_of_scope_endpoint(cmd, SAMPLE_ENDPOINTS)
-        assert result == "/#/contact"
+    def test_returns_first_matching_domain(self):
+        # Command contains two out-of-scope domains; first in list should win
+        cmd = "curl http://admin.juice-shop.com && curl http://staging.juice-shop.com"
+        result = ca._find_out_of_scope_domain(cmd, SAMPLE_DOMAINS)
+        assert result == "admin.juice-shop.com"
+
+    def test_does_not_match_partial_domain_name(self):
+        # "shop.com" alone should not match "admin.juice-shop.com"
+        result = ca._find_out_of_scope_domain("http://shop.com", SAMPLE_DOMAINS)
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
-# _ToolRouterHook – out-of-scope endpoint blocking (known tools)
+# _ToolRouterHook – out-of-scope domain blocking (known tools)
 # ---------------------------------------------------------------------------
 
 
-class TestOutOfScopeEndpointBlocking:
-    """Simulate the AI sending tool calls that target out-of-scope endpoints."""
+class TestOutOfScopeDomainBlocking:
+    """Simulate the AI sending tool calls that target out-of-scope domains."""
 
     # ── shell tool ──────────────────────────────────────────────────────────
 
-    def test_shell_curl_to_contact_page_is_blocked(self):
+    def test_shell_curl_to_admin_subdomain_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="shell",
-            tool_input={"command": "curl -s http://localhost:3000/#/contact"},
+            tool_input={"command": "curl -s https://admin.juice-shop.com/dashboard"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
 
         cmd = event.tool_use["input"]["command"]
         assert cmd.startswith("echo 'OUT_OF_SCOPE")
-        assert "/#/contact" in cmd
+        assert "admin.juice-shop.com" in cmd
 
-    def test_shell_wget_to_about_page_is_blocked(self):
+    def test_shell_wget_to_staging_subdomain_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="shell",
-            tool_input={"command": "wget http://juice-shop:3000/#/about -O -"},
+            tool_input={"command": "wget https://staging.juice-shop.com/rest/user/whoami -O -"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/about" in cmd
+        assert "staging.juice-shop.com" in cmd
 
-    def test_shell_curl_to_photo_wall_is_blocked(self):
+    def test_shell_nmap_against_internal_host_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="shell",
-            tool_input={"command": "curl http://localhost:3000/#/photo-wall"},
+            tool_input={"command": "nmap -sV internal.juice-shop.local"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/photo-wall" in cmd
+        assert "internal.juice-shop.local" in cmd
 
     # ── http_request tool ───────────────────────────────────────────────────
 
-    def test_http_request_to_contact_is_blocked(self):
+    def test_http_request_to_admin_subdomain_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="http_request",
-            tool_input={"url": "http://localhost:3000/#/contact", "method": "GET"},
+            tool_input={"url": "https://admin.juice-shop.com/api/users", "method": "GET"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/contact" in cmd
+        assert "admin.juice-shop.com" in cmd
         assert event.selected_tool is hook._shell_tool
 
-    def test_http_request_to_about_is_blocked(self):
+    def test_http_request_to_staging_subdomain_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="http_request",
-            tool_input={"url": "http://localhost:3000/#/about", "method": "GET"},
+            tool_input={"url": "https://staging.juice-shop.com/rest/products", "method": "GET"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
 
         assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
 
-    def test_http_request_to_photo_wall_is_blocked(self):
+    def test_http_request_to_internal_host_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="http_request",
-            tool_input={"url": "http://localhost:3000/#/photo-wall", "method": "GET"},
+            tool_input={"url": "http://internal.juice-shop.local/admin", "method": "POST"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
@@ -281,38 +241,51 @@ class TestOutOfScopeEndpointBlocking:
 
     # ── unknown tool routed through hook ────────────────────────────────────
 
-    def test_unknown_tool_with_out_of_scope_target_is_blocked(self):
-        """AI calls an unknown tool like 'gobuster' with an out-of-scope target."""
+    def test_unknown_tool_with_out_of_scope_domain_target_is_blocked(self):
+        """AI calls an unknown tool like 'gobuster' with an out-of-scope domain."""
         hook = _make_hook()
         event = _make_event(
             tool_name="gobuster",
-            tool_input={"options": "dir", "target": "http://localhost:3000/#/about"},
+            tool_input={"options": "dir", "target": "https://admin.juice-shop.com"},
             selected_tool=None,
         )
         hook._on_before_tool(event)
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/about" in cmd
+        assert "admin.juice-shop.com" in cmd
 
-    def test_unknown_tool_with_out_of_scope_url_is_blocked(self):
+    def test_unknown_tool_with_out_of_scope_domain_url_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="sqlmap",
-            tool_input={"url": "http://localhost:3000/#/contact?id=1"},
+            tool_input={"url": "https://staging.juice-shop.com/search?q=1"},
             selected_tool=None,
         )
         hook._on_before_tool(event)
 
         assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
 
+    def test_unknown_tool_with_out_of_scope_host_field_is_blocked(self):
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="nikto",
+            tool_input={"host": "internal.juice-shop.local", "options": "-p 80"},
+            selected_tool=None,
+        )
+        hook._on_before_tool(event)
+
+        cmd = event.tool_use["input"]["command"]
+        assert "OUT_OF_SCOPE" in cmd
+        assert "internal.juice-shop.local" in cmd
+
     # ── python_repl ─────────────────────────────────────────────────────────
 
-    def test_python_repl_with_out_of_scope_url_in_code_is_blocked(self):
+    def test_python_repl_with_out_of_scope_domain_in_code_is_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="python_repl",
-            tool_input={"code": "import requests\nrequests.get('http://localhost:3000/#/photo-wall')"},
+            tool_input={"code": "import requests\nrequests.get('https://admin.juice-shop.com/api')"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
@@ -322,12 +295,12 @@ class TestOutOfScopeEndpointBlocking:
     # ── blocked call redirected to shell ────────────────────────────────────
 
     def test_blocked_call_selected_tool_is_always_shell(self):
-        """Regardless of the original tool, a blocked call must be routed to shell."""
+        """Regardless of the original tool, a blocked domain call must be routed to shell."""
         hook = _make_hook()
         original_tool = object()
         event = _make_event(
             tool_name="http_request",
-            tool_input={"url": "http://localhost:3000/#/contact"},
+            tool_input={"url": "https://admin.juice-shop.com/"},
             selected_tool=original_tool,
         )
         hook._on_before_tool(event)
@@ -335,16 +308,16 @@ class TestOutOfScopeEndpointBlocking:
         assert event.selected_tool is hook._shell_tool
         assert event.selected_tool is not original_tool
 
-    def test_block_message_labels_kind_as_endpoint(self):
+    def test_block_message_labels_kind_as_domain(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="shell",
-            tool_input={"command": "curl http://localhost:3000/#/contact"},
+            tool_input={"command": "curl https://staging.juice-shop.com/rest/whoami"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
 
-        assert "endpoint" in event.tool_use["input"]["command"]
+        assert "domain" in event.tool_use["input"]["command"]
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +325,7 @@ class TestOutOfScopeEndpointBlocking:
 # ---------------------------------------------------------------------------
 
 
-class TestInScopeCallsPassThrough:
+class TestInScopeDomainCallsPassThrough:
     def test_in_scope_shell_command_not_blocked(self):
         hook = _make_hook()
         original_tool = object()
@@ -371,15 +344,15 @@ class TestInScopeCallsPassThrough:
         original_tool = object()
         event = _make_event(
             tool_name="http_request",
-            tool_input={"url": "http://localhost:3000/api/users", "method": "GET"},
+            tool_input={"url": "http://juice-shop.com/rest/products", "method": "GET"},
             selected_tool=original_tool,
         )
         hook._on_before_tool(event)
 
-        assert event.tool_use["input"]["url"] == "http://localhost:3000/api/users"
+        assert event.tool_use["input"]["url"] == "http://juice-shop.com/rest/products"
         assert event.selected_tool is original_tool
 
-    def test_nmap_scan_not_blocked(self):
+    def test_nmap_against_in_scope_host_not_blocked(self):
         hook = _make_hook()
         event = _make_event(
             tool_name="shell",
@@ -390,9 +363,9 @@ class TestInScopeCallsPassThrough:
 
         assert "OUT_OF_SCOPE" not in event.tool_use["input"]["command"]
 
-    def test_no_endpoints_loaded_never_blocks(self):
-        hook = _make_hook(endpoints=[])
-        original_input = {"command": "curl http://localhost:3000/#/contact"}
+    def test_no_domains_loaded_never_blocks(self):
+        hook = _make_hook(domains=[])
+        original_input = {"command": "curl https://admin.juice-shop.com/api"}
         event = _make_event(
             tool_name="shell",
             tool_input=dict(original_input),
@@ -404,69 +377,58 @@ class TestInScopeCallsPassThrough:
 
 
 # ---------------------------------------------------------------------------
-# _ToolRouterHook – existing unknown-tool routing still works
+# _ToolRouterHook – endpoint check runs before domain check
 # ---------------------------------------------------------------------------
 
 
-class TestUnknownToolRoutingUnchanged:
-    """Ensure the original routing behaviour is preserved for in-scope calls."""
+class TestEndpointTakesPriorityOverDomain:
+    """When both an endpoint and a domain match, endpoint block fires first."""
 
-    def test_unknown_tool_still_routed_to_shell(self):
-        hook = _make_hook(endpoints=[])
-        sentinel_shell = hook._shell_tool
+    def test_endpoint_blocked_before_domain_when_both_present(self):
+        sentinel_shell = object()
+        hook = ca._ToolRouterHook(shell_tool=sentinel_shell)
+        hook._out_of_scope_endpoints = ["/#/contact"]
+        hook._out_of_scope_domains = ["admin.juice-shop.com"]
+        hook._shell_tool = sentinel_shell
 
-        event = _make_event(
-            tool_name="nmap",
-            tool_input={"options": "-sC -sV", "target": "10.0.0.1"},
-            selected_tool=None,
-        )
-        hook._on_before_tool(event)
-
-        assert event.selected_tool is sentinel_shell
-        cmd = event.tool_use["input"]["command"]
-        assert cmd.startswith("nmap")
-        assert "-sC" in cmd and "-sV" in cmd and "10.0.0.1" in cmd
-
-    def test_known_tool_not_rerouted_when_in_scope(self):
-        hook = _make_hook(endpoints=[])
-        original_tool = object()
         event = _make_event(
             tool_name="shell",
-            tool_input={"command": "echo hello"},
-            selected_tool=original_tool,
+            tool_input={"command": "curl https://admin.juice-shop.com/#/contact"},
+            selected_tool=object(),
         )
         hook._on_before_tool(event)
 
-        assert event.selected_tool is original_tool
-        assert event.tool_use["input"]["command"] == "echo hello"
+        cmd = event.tool_use["input"]["command"]
+        assert "OUT_OF_SCOPE" in cmd
+        assert "/#/contact" in cmd  # endpoint blocked first
 
 
 # ---------------------------------------------------------------------------
-# File-based integration: hook loads endpoints from an actual tmp file
+# File-based integration: hook loads domains from an actual tmp file
 # ---------------------------------------------------------------------------
 
 
-class TestFileBasedEndpointIntegration:
-    def test_hook_loads_and_blocks_from_file(self, tmp_path):
+class TestFileBasedDomainIntegration:
+    def test_hook_loads_and_blocks_domain_from_file(self, tmp_path):
         oos_file = tmp_path / "out_of_scope.txt"
         oos_file.write_text(
             "# comment\n"
             "[ENDPOINTS]\n"
             "/#/contact\n"
-            "/#/about\n"
-            "/#/photo-wall\n"
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
+            "staging.juice-shop.com\n"
+            "internal.juice-shop.local\n"
         )
 
         sentinel_shell = object()
         hook = ca._ToolRouterHook(shell_tool=sentinel_shell, out_of_scope_file=oos_file)
 
-        assert len(hook._out_of_scope_endpoints) == 3
+        assert len(hook._out_of_scope_domains) == 3
 
         event = _make_event(
             tool_name="http_request",
-            tool_input={"url": "http://localhost:3000/#/contact"},
+            tool_input={"url": "https://admin.juice-shop.com/api/users"},
             selected_tool=object(),
         )
         hook._on_before_tool(event)
@@ -474,15 +436,15 @@ class TestFileBasedEndpointIntegration:
         assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
         assert event.selected_tool is sentinel_shell
 
-    def test_hook_does_not_block_when_file_missing(self, tmp_path):
+    def test_hook_does_not_block_domain_when_file_missing(self, tmp_path):
         sentinel_shell = object()
         hook = ca._ToolRouterHook(
             shell_tool=sentinel_shell,
             out_of_scope_file=tmp_path / "nonexistent.txt",
         )
-        assert hook._out_of_scope_endpoints == []
+        assert hook._out_of_scope_domains == []
 
-        original_input = {"url": "http://localhost:3000/#/contact"}
+        original_input = {"url": "https://admin.juice-shop.com/api"}
         event = _make_event(
             tool_name="http_request",
             tool_input=dict(original_input),
@@ -491,3 +453,19 @@ class TestFileBasedEndpointIntegration:
         hook._on_before_tool(event)
 
         assert event.tool_use["input"] == original_input
+
+    def test_hook_loads_both_sections_independently(self, tmp_path):
+        oos_file = tmp_path / "out_of_scope.txt"
+        oos_file.write_text(
+            "[ENDPOINTS]\n"
+            "/#/contact\n"
+            "/#/about\n"
+            "[DOMAINS]\n"
+            "admin.juice-shop.com\n"
+        )
+
+        sentinel_shell = object()
+        hook = ca._ToolRouterHook(shell_tool=sentinel_shell, out_of_scope_file=oos_file)
+
+        assert len(hook._out_of_scope_endpoints) == 2
+        assert len(hook._out_of_scope_domains) == 1

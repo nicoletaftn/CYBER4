@@ -1,0 +1,28 @@
+# OWASP Juice Shop - Out of Scope
+#
+# List one entry per line under the appropriate section header.
+# Partial matches are supported — the filter performs a substring match, so
+# "/#/contact" blocks any tool-call input containing that string
+# (e.g. http://localhost:3000/#/contact), and "admin.juice-shop.com" blocks
+# any input referencing that hostname.
+#
+# Lines starting with '#' and blank lines are ignored.
+# Section headers are [ENDPOINTS] and [DOMAINS] — entries must appear under
+# the correct header.
+
+# ══════════════════════════════════════════════════════════════════════════════
+[ENDPOINTS]
+# URL path fragments and page routes that must not be tested.
+
+# ── Customer / UI pages ───────────────────────────────────────────────────────
+/#/contact
+/#/about
+/#/photo-wall
+
+# ══════════════════════════════════════════════════════════════════════════════
+[DOMAINS]
+# Fully-qualified domain names and subdomains that are out of scope.
+# Any tool call whose inputs reference one of these hostnames will be blocked.
+
+# ── Out-of-scope subdomains ───────────────────────────────────────────────────
+dev.juice-shop

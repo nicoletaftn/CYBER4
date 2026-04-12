@@ -40,32 +40,71 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Out-of-scope endpoint helpers
+# Out-of-scope helpers
 # ---------------------------------------------------------------------------
 
-def _load_out_of_scope_endpoints(filepath: "str | Path") -> list[str]:
-    """Load out-of-scope endpoint paths from *filepath*.
+def _parse_oos_section(filepath: "str | Path", section_name: str) -> list[str]:
+    """Return entries from a ``[SECTION_NAME]`` block inside *filepath*.
 
-    Each non-blank, non-comment line is treated as an endpoint path fragment
-    (e.g. ``/#/contact``).  The file may live anywhere; a missing file is
-    silently ignored and returns an empty list.
+    The file is expected to use ``[ENDPOINTS]`` / ``[DOMAINS]`` section
+    headers.  Only non-blank, non-comment lines between the matching header
+    and the next ``[...]`` header (or EOF) are returned.  A missing file
+    silently returns an empty list.
     """
     try:
         path = Path(filepath)
         if not path.exists():
             return []
-        lines = path.read_text(encoding="utf-8").splitlines()
-        return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+        target = f"[{section_name.upper()}]"
+        results: list[str] = []
+        in_section = False
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            ln = raw.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            if ln.startswith("[") and ln.endswith("]"):
+                in_section = ln.upper() == target
+                continue
+            if in_section:
+                results.append(ln)
+        return results
     except Exception as exc:  # pragma: no cover
-        logger.warning("Could not load out-of-scope endpoints from %s: %s", filepath, exc)
+        logger.warning("Could not parse section %s from %s: %s", section_name, filepath, exc)
         return []
 
 
+def _load_out_of_scope_endpoints(filepath: "str | Path") -> list[str]:
+    """Load out-of-scope endpoint paths from the ``[ENDPOINTS]`` section of *filepath*.
+
+    Each non-blank, non-comment line under ``[ENDPOINTS]`` is treated as a
+    path fragment (e.g. ``/#/contact``).  A missing file returns ``[]``.
+    """
+    return _parse_oos_section(filepath, "ENDPOINTS")
+
+
+def _load_out_of_scope_domains(filepath: "str | Path") -> list[str]:
+    """Load out-of-scope domain / subdomain entries from the ``[DOMAINS]`` section of *filepath*.
+
+    Each non-blank, non-comment line under ``[DOMAINS]`` is treated as a
+    hostname fragment (e.g. ``admin.juice-shop.com``).  A missing file
+    returns ``[]``.
+    """
+    return _parse_oos_section(filepath, "DOMAINS")
+
+
 def _find_out_of_scope_endpoint(text: str, endpoints: list[str]) -> "str | None":
-    """Return the first endpoint from *endpoints* that is a substring of *text*, or ``None``."""
+    """Return the first entry from *endpoints* that is a substring of *text*, or ``None``."""
     for endpoint in endpoints:
         if endpoint in text:
             return endpoint
+    return None
+
+
+def _find_out_of_scope_domain(text: str, domains: list[str]) -> "str | None":
+    """Return the first entry from *domains* that is a substring of *text*, or ``None``."""
+    for domain in domains:
+        if domain in text:
+            return domain
     return None
 
 
@@ -76,15 +115,15 @@ def _find_out_of_scope_endpoint(text: str, endpoints: list[str]) -> "str | None"
 class _ToolRouterHook:
     """BeforeToolCall hook that:
 
-    1. Blocks tool calls whose inputs reference an out-of-scope endpoint by
-       redirecting them to the shell tool with a clear ``OUT_OF_SCOPE`` echo
-       message, so the agent receives feedback without actually hitting the
-       endpoint.
+    1. Blocks tool calls whose inputs reference an out-of-scope endpoint **or**
+       domain/subdomain by redirecting them to the shell tool with a clear
+       ``OUT_OF_SCOPE`` echo message, so the agent receives feedback without
+       actually hitting the target.
     2. Routes any remaining *unknown* tool names to the shell tool, rebuilding
        the CLI command from the tool name and its input parameters.
     """
 
-    #: Fields inspected when scanning tool inputs for endpoint paths.
+    #: Fields inspected when scanning tool inputs for endpoint paths / hostnames.
     _SCAN_FIELDS: tuple[str, ...] = ("command", "url", "target", "host", "ip", "options", "code", "path")
 
     def __init__(
@@ -96,10 +135,15 @@ class _ToolRouterHook:
         self._out_of_scope_endpoints: list[str] = (
             _load_out_of_scope_endpoints(out_of_scope_file) if out_of_scope_file else []
         )
-        if self._out_of_scope_endpoints:
+        self._out_of_scope_domains: list[str] = (
+            _load_out_of_scope_domains(out_of_scope_file) if out_of_scope_file else []
+        )
+        total = len(self._out_of_scope_endpoints) + len(self._out_of_scope_domains)
+        if total:
             logger.info(
-                "Out-of-scope filter active: %d endpoints loaded from %s",
+                "Out-of-scope filter active: %d endpoint(s) and %d domain(s) loaded from %s",
                 len(self._out_of_scope_endpoints),
+                len(self._out_of_scope_domains),
                 out_of_scope_file,
             )
 
@@ -110,23 +154,21 @@ class _ToolRouterHook:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _block_command(self, endpoint: str) -> str:
+    def _block_command(self, entry: str, kind: str = "endpoint") -> str:
         """Return a shell echo command that informs the agent the call was blocked."""
         return (
-            f"echo 'OUT_OF_SCOPE: endpoint \"{endpoint}\" is listed as out-of-scope "
+            f"echo 'OUT_OF_SCOPE: {kind} \"{entry}\" is listed as out-of-scope "
             f"and will not be tested. This action has been blocked.'"
         )
 
     def _check_and_block(self, event) -> bool:  # type: ignore[no-untyped-def]
-        """Inspect the tool call for out-of-scope endpoints.
+        """Inspect the tool call for out-of-scope endpoints and domains.
 
         If a match is found the event is mutated to run an echo-block command
         via the shell tool and ``True`` is returned.  Otherwise returns
-        ``False`` without touching the event.
+        ``False`` without touching the event.  Endpoint check runs first;
+        domain check runs only when no endpoint match is found.
         """
-        if not self._out_of_scope_endpoints:
-            return False
-
         tool_use = getattr(event, "tool_use", {}) or {}
         tool_name = str(tool_use.get("name", "")).strip()
         raw_input = tool_use.get("input", {}) or {}
@@ -142,16 +184,33 @@ class _ToolRouterHook:
             fragments.append(raw_input)
 
         combined = " ".join(fragments)
-        blocked = _find_out_of_scope_endpoint(combined, self._out_of_scope_endpoints)
-        if blocked:
-            logger.warning(
-                "Tool call blocked — out-of-scope endpoint detected: %r (tool: %s)",
-                blocked,
-                tool_name,
-            )
-            event.selected_tool = self._shell_tool  # type: ignore[attr-defined]
-            tool_use["input"] = {"command": self._block_command(blocked)}
-            return True
+
+        # ── Endpoint check ───────────────────────────────────────────────────
+        if self._out_of_scope_endpoints:
+            blocked = _find_out_of_scope_endpoint(combined, self._out_of_scope_endpoints)
+            if blocked:
+                logger.warning(
+                    "Tool call blocked — out-of-scope endpoint detected: %r (tool: %s)",
+                    blocked,
+                    tool_name,
+                )
+                event.selected_tool = self._shell_tool  # type: ignore[attr-defined]
+                tool_use["input"] = {"command": self._block_command(blocked, "endpoint")}
+                return True
+
+        # ── Domain / subdomain check ─────────────────────────────────────────
+        if self._out_of_scope_domains:
+            blocked_domain = _find_out_of_scope_domain(combined, self._out_of_scope_domains)
+            if blocked_domain:
+                logger.warning(
+                    "Tool call blocked — out-of-scope domain detected: %r (tool: %s)",
+                    blocked_domain,
+                    tool_name,
+                )
+                event.selected_tool = self._shell_tool  # type: ignore[attr-defined]
+                tool_use["input"] = {"command": self._block_command(blocked_domain, "domain")}
+                return True
+
         return False
 
     # ------------------------------------------------------------------
@@ -990,8 +1049,8 @@ Guidance and tool names in prompts are illustrative, not prescriptive. Always ch
     )
 
     # Tool router: routes unknown tools to shell AND enforces the out-of-scope
-    # endpoint blocklist defined in out_of_scope_endpoints.txt at the project root.
-    _oos_file = Path(__file__).parents[2] / "out_of_scope_endpoints.txt"
+    # blocklist (endpoints + domains) defined in out_of_scope.txt at the project root.
+    _oos_file = Path(__file__).parents[2] / "out_of_scope.txt"
     tool_router_hook = _ToolRouterHook(shell, out_of_scope_file=_oos_file)
 
     hooks = [tool_router_hook, react_hooks, prompt_rebuild_hook]
