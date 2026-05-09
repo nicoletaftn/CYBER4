@@ -36,7 +36,7 @@ _OOS_FILE_CONTENT = (
     "# comment\n"
     "\n"
     "[ENDPOINTS]\n"
-    "/#/contact\n"
+    "/contact\n"
     "\n"
     "[DOMAINS]\n"
     "admin.juice-shop.com\n"
@@ -96,17 +96,17 @@ class TestLoadOutOfScopeDomains:
         f = tmp_path / "oos.txt"
         f.write_text(
             "[ENDPOINTS]\n"
-            "/#/contact\n"
+            "/contact\n"
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
         )
         result = ca._load_out_of_scope_domains(f)
         assert result == ["admin.juice-shop.com"]
-        assert "/#/contact" not in result
+        assert "/contact" not in result
 
     def test_no_domains_section_returns_empty(self, tmp_path):
         f = tmp_path / "oos.txt"
-        f.write_text("[ENDPOINTS]\n/#/contact\n")
+        f.write_text("[ENDPOINTS]\n/contact\n")
         assert ca._load_out_of_scope_domains(f) == []
 
 
@@ -377,6 +377,122 @@ class TestInScopeDomainCallsPassThrough:
 
 
 # ---------------------------------------------------------------------------
+# _ToolRouterHook – editor tool write-time interception 
+# ---------------------------------------------------------------------------
+
+
+class TestEditorWriteTimeDomainInterception:
+    """Verify that out-of-scope domains embedded in scripts are blocked at write
+    time via the editor tool's ``content`` field, before the file reaches disk."""
+
+    def test_editor_create_with_out_of_scope_domain_in_content_is_blocked(self):
+        """Agent writes a Python script containing an out-of-scope domain via editor."""
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/script.py",
+                "content": "import requests\nr = requests.get('https://admin.juice-shop.com/api/users')\nprint(r.text)",
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        cmd = event.tool_use["input"]["command"]
+        assert "OUT_OF_SCOPE" in cmd
+        assert "admin.juice-shop.com" in cmd
+
+    def test_editor_create_with_staging_domain_in_content_is_blocked(self):
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/probe.py",
+                "content": "import urllib.request\nurllib.request.urlopen('https://staging.juice-shop.com/rest/whoami')",
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
+
+    def test_editor_create_with_internal_host_in_multiline_script_is_blocked(self):
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/recon.py",
+                "content": (
+                    "#!/usr/bin/env python3\n"
+                    "import requests\n"
+                    "HOST = 'internal.juice-shop.local'\n"
+                    "r = requests.get(f'http://{HOST}/admin')\n"
+                    "print(r.status_code)\n"
+                ),
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
+
+    def test_editor_write_blocked_domain_tool_is_redirected_to_shell(self):
+        """A blocked editor write must be routed to shell, same as other blocks."""
+        hook = _make_hook()
+        original_tool = object()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/s.py",
+                "content": "requests.get('https://admin.juice-shop.com/')",
+            },
+            selected_tool=original_tool,
+        )
+        hook._on_before_tool(event)
+
+        assert event.selected_tool is hook._shell_tool
+        assert event.selected_tool is not original_tool
+
+    def test_editor_create_with_in_scope_content_is_not_blocked(self):
+        """A script that only accesses in-scope domains must pass through."""
+        hook = _make_hook()
+        original_tool = object()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/legit.py",
+                "content": "import requests\nr = requests.get('http://localhost:3000/api/products')\nprint(r.json())",
+            },
+            selected_tool=original_tool,
+        )
+        hook._on_before_tool(event)
+
+        assert event.selected_tool is original_tool
+        assert "OUT_OF_SCOPE" not in str(event.tool_use["input"])
+
+    def test_editor_update_existing_file_with_out_of_scope_domain_is_blocked(self):
+        """Editing (not just creating) a file with an out-of-scope domain is also blocked."""
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "str_replace",
+                "path": "/tmp/existing.py",
+                "content": "url = 'https://staging.juice-shop.com/rest/products'",
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
+
+
+# ---------------------------------------------------------------------------
 # _ToolRouterHook – endpoint check runs before domain check
 # ---------------------------------------------------------------------------
 
@@ -387,7 +503,7 @@ class TestEndpointTakesPriorityOverDomain:
     def test_endpoint_blocked_before_domain_when_both_present(self):
         sentinel_shell = object()
         hook = ca._ToolRouterHook(shell_tool=sentinel_shell)
-        hook._out_of_scope_endpoints = ["/#/contact"]
+        hook._out_of_scope_endpoints = ["/contact"]
         hook._out_of_scope_domains = ["admin.juice-shop.com"]
         hook._shell_tool = sentinel_shell
 
@@ -400,7 +516,7 @@ class TestEndpointTakesPriorityOverDomain:
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/contact" in cmd  # endpoint blocked first
+        assert "/contact" in cmd  # endpoint blocked first
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +530,7 @@ class TestFileBasedDomainIntegration:
         oos_file.write_text(
             "# comment\n"
             "[ENDPOINTS]\n"
-            "/#/contact\n"
+            "/contact\n"
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
             "staging.juice-shop.com\n"
@@ -458,8 +574,8 @@ class TestFileBasedDomainIntegration:
         oos_file = tmp_path / "out_of_scope.txt"
         oos_file.write_text(
             "[ENDPOINTS]\n"
-            "/#/contact\n"
-            "/#/about\n"
+            "/contact\n"
+            "/about\n"
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
         )

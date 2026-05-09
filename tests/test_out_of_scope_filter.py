@@ -7,9 +7,9 @@ whether the call is blocked/rewritten (out-of-scope) or passed through
 unchanged (in-scope / normal routing).
 
 Current out_of_scope.txt [ENDPOINTS] entries:
-    /#/contact
-    /#/about
-    /#/photo-wall
+    /contact
+    /about
+    /photo-wall
 """
 
 import types
@@ -26,9 +26,9 @@ from modules.agents import cyber_autoagent as ca
 
 # Mirrors the three entries currently in the [ENDPOINTS] section of out_of_scope.txt
 SAMPLE_ENDPOINTS = [
-    "/#/contact",
-    "/#/about",
-    "/#/photo-wall",
+    "/contact",
+    "/about",
+    "/photo-wall",
 ]
 
 # Minimal valid file content with section headers for use in tmp-file tests
@@ -36,9 +36,9 @@ _OOS_FILE_CONTENT = (
     "# comment\n"
     "\n"
     "[ENDPOINTS]\n"
-    "/#/contact\n"
-    "  /#/about  \n"
-    "/#/photo-wall\n"
+    "/contact\n"
+    "  /about  \n"
+    "/photo-wall\n"
     "\n"
     "[DOMAINS]\n"
     "admin.juice-shop.com\n"
@@ -80,7 +80,7 @@ class TestParseOosSection:
         f = tmp_path / "oos.txt"
         f.write_text(_OOS_FILE_CONTENT)
         result = ca._parse_oos_section(f, "ENDPOINTS")
-        assert result == ["/#/contact", "/#/about", "/#/photo-wall"]
+        assert result == ["/contact", "/about", "/photo-wall"]
 
     def test_parses_domains_section(self, tmp_path):
         f = tmp_path / "oos.txt"
@@ -105,8 +105,8 @@ class TestParseOosSection:
 
     def test_section_name_case_insensitive(self, tmp_path):
         f = tmp_path / "oos.txt"
-        f.write_text("[endpoints]\n/#/contact\n")
-        assert ca._parse_oos_section(f, "ENDPOINTS") == ["/#/contact"]
+        f.write_text("[endpoints]\n/contact\n")
+        assert ca._parse_oos_section(f, "ENDPOINTS") == ["/contact"]
 
 
 # ---------------------------------------------------------------------------
@@ -125,12 +125,12 @@ class TestLoadOutOfScopeEndpoints:
             "# comment\n"
             "\n"
             "[ENDPOINTS]\n"
-            "/#/contact\n"
-            "  /#/about  \n"
-            "/#/photo-wall\n"
+            "/contact\n"
+            "  /about  \n"
+            "/photo-wall\n"
         )
         result = ca._load_out_of_scope_endpoints(f)
-        assert result == ["/#/contact", "/#/about", "/#/photo-wall"]
+        assert result == ["/contact", "/about", "/photo-wall"]
 
     def test_ignores_blank_lines_and_comments(self, tmp_path):
         f = tmp_path / "oos.txt"
@@ -146,12 +146,12 @@ class TestLoadOutOfScopeEndpoints:
         f = tmp_path / "oos.txt"
         f.write_text(
             "[ENDPOINTS]\n"
-            "/#/contact\n"
+            "/contact\n"
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
         )
         result = ca._load_out_of_scope_endpoints(f)
-        assert result == ["/#/contact"]
+        assert result == ["/contact"]
         assert "admin.juice-shop.com" not in result
 
 
@@ -164,17 +164,17 @@ class TestFindOutOfScopeEndpoint:
     def test_finds_contact_path_in_full_url(self):
         url = "http://localhost:3000/#/contact"
         result = ca._find_out_of_scope_endpoint(url, SAMPLE_ENDPOINTS)
-        assert result == "/#/contact"
+        assert result == "/contact"
 
     def test_finds_about_inside_curl_command(self):
         cmd = "curl -s 'http://juice-shop.local:3000/#/about'"
         result = ca._find_out_of_scope_endpoint(cmd, SAMPLE_ENDPOINTS)
-        assert result == "/#/about"
+        assert result == "/about"
 
     def test_finds_photo_wall_path(self):
         cmd = "curl http://localhost:3000/#/photo-wall"
         result = ca._find_out_of_scope_endpoint(cmd, SAMPLE_ENDPOINTS)
-        assert result == "/#/photo-wall"
+        assert result == "/photo-wall"
 
     def test_returns_none_for_clean_url(self):
         url = "http://localhost:3000/api/products"
@@ -189,7 +189,7 @@ class TestFindOutOfScopeEndpoint:
         # Command contains two out-of-scope endpoints; first in list should win
         cmd = "curl http://localhost:3000/#/contact && curl http://localhost:3000/#/about"
         result = ca._find_out_of_scope_endpoint(cmd, SAMPLE_ENDPOINTS)
-        assert result == "/#/contact"
+        assert result == "/contact"
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ class TestOutOfScopeEndpointBlocking:
 
         cmd = event.tool_use["input"]["command"]
         assert cmd.startswith("echo 'OUT_OF_SCOPE")
-        assert "/#/contact" in cmd
+        assert "/contact" in cmd
 
     def test_shell_wget_to_about_page_is_blocked(self):
         hook = _make_hook()
@@ -226,7 +226,7 @@ class TestOutOfScopeEndpointBlocking:
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/about" in cmd
+        assert "/about" in cmd
 
     def test_shell_curl_to_photo_wall_is_blocked(self):
         hook = _make_hook()
@@ -239,7 +239,7 @@ class TestOutOfScopeEndpointBlocking:
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/photo-wall" in cmd
+        assert "/photo-wall" in cmd
 
     # ── http_request tool ───────────────────────────────────────────────────
 
@@ -254,7 +254,7 @@ class TestOutOfScopeEndpointBlocking:
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/contact" in cmd
+        assert "/contact" in cmd
         assert event.selected_tool is hook._shell_tool
 
     def test_http_request_to_about_is_blocked(self):
@@ -293,7 +293,7 @@ class TestOutOfScopeEndpointBlocking:
 
         cmd = event.tool_use["input"]["command"]
         assert "OUT_OF_SCOPE" in cmd
-        assert "/#/about" in cmd
+        assert "/about" in cmd
 
     def test_unknown_tool_with_out_of_scope_url_is_blocked(self):
         hook = _make_hook()
@@ -442,6 +442,122 @@ class TestUnknownToolRoutingUnchanged:
 
 
 # ---------------------------------------------------------------------------
+# _ToolRouterHook – editor tool write-time interception 
+# ---------------------------------------------------------------------------
+
+
+class TestEditorWriteTimeInterception:
+    """Verify that out-of-scope URLs embedded in scripts are blocked at write
+    time via the editor tool's ``content`` field, before the file reaches disk."""
+
+    def test_editor_create_with_out_of_scope_endpoint_in_content_is_blocked(self):
+        """Agent writes a Python script containing an out-of-scope URL via editor."""
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/script.py",
+                "content": "import requests\nr = requests.get('http://localhost:3000/#/contact')\nprint(r.text)",
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        cmd = event.tool_use["input"]["command"]
+        assert "OUT_OF_SCOPE" in cmd
+        assert "/contact" in cmd
+
+    def test_editor_create_with_about_endpoint_in_content_is_blocked(self):
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/check_about.py",
+                "content": "import urllib.request\nurllib.request.urlopen('http://juice-shop:3000/#/about')",
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
+
+    def test_editor_create_with_photo_wall_in_multiline_script_is_blocked(self):
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/recon.py",
+                "content": (
+                    "#!/usr/bin/env python3\n"
+                    "import requests\n"
+                    "BASE = 'http://localhost:3000'\n"
+                    "r = requests.get(BASE + '/#/photo-wall')\n"
+                    "print(r.status_code)\n"
+                ),
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
+
+    def test_editor_write_blocked_tool_is_redirected_to_shell(self):
+        """A blocked editor write must be routed to shell, same as other blocks."""
+        hook = _make_hook()
+        original_tool = object()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/s.py",
+                "content": "requests.get('http://localhost:3000/#/contact')",
+            },
+            selected_tool=original_tool,
+        )
+        hook._on_before_tool(event)
+
+        assert event.selected_tool is hook._shell_tool
+        assert event.selected_tool is not original_tool
+
+    def test_editor_create_with_in_scope_content_is_not_blocked(self):
+        """A script that only accesses in-scope endpoints must pass through."""
+        hook = _make_hook()
+        original_tool = object()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "create",
+                "path": "/tmp/legit.py",
+                "content": "import requests\nr = requests.get('http://localhost:3000/api/products')\nprint(r.json())",
+            },
+            selected_tool=original_tool,
+        )
+        hook._on_before_tool(event)
+
+        assert event.selected_tool is original_tool
+        assert "OUT_OF_SCOPE" not in str(event.tool_use["input"])
+
+    def test_editor_update_existing_file_with_out_of_scope_content_is_blocked(self):
+        """Editing (not just creating) a file with an out-of-scope URL is also blocked."""
+        hook = _make_hook()
+        event = _make_event(
+            tool_name="editor",
+            tool_input={
+                "command": "str_replace",
+                "path": "/tmp/existing.py",
+                "content": "url = 'http://localhost:3000/#/about'",
+            },
+            selected_tool=object(),
+        )
+        hook._on_before_tool(event)
+
+        assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
+
+
+# ---------------------------------------------------------------------------
 # File-based integration: hook loads endpoints from an actual tmp file
 # ---------------------------------------------------------------------------
 
@@ -452,9 +568,9 @@ class TestFileBasedEndpointIntegration:
         oos_file.write_text(
             "# comment\n"
             "[ENDPOINTS]\n"
-            "/#/contact\n"
-            "/#/about\n"
-            "/#/photo-wall\n"
+            "/contact\n"
+            "/about\n"
+            "/photo-wall\n"
             "[DOMAINS]\n"
             "admin.juice-shop.com\n"
         )

@@ -77,7 +77,7 @@ def _load_out_of_scope_endpoints(filepath: "str | Path") -> list[str]:
     """Load out-of-scope endpoint paths from the ``[ENDPOINTS]`` section of *filepath*.
 
     Each non-blank, non-comment line under ``[ENDPOINTS]`` is treated as a
-    path fragment (e.g. ``/#/contact``).  A missing file returns ``[]``.
+    path fragment (e.g. ``/contact``).  A missing file returns ``[]``.
     """
     return _parse_oos_section(filepath, "ENDPOINTS")
 
@@ -86,7 +86,7 @@ def _load_out_of_scope_domains(filepath: "str | Path") -> list[str]:
     """Load out-of-scope domain / subdomain entries from the ``[DOMAINS]`` section of *filepath*.
 
     Each non-blank, non-comment line under ``[DOMAINS]`` is treated as a
-    hostname fragment (e.g. ``admin.juice-shop.com``).  A missing file
+    hostname fragment (e.g. ``dev.juice-shop``).  A missing file
     returns ``[]``.
     """
     return _parse_oos_section(filepath, "DOMAINS")
@@ -124,7 +124,10 @@ class _ToolRouterHook:
     """
 
     #: Fields inspected when scanning tool inputs for endpoint paths / hostnames.
-    _SCAN_FIELDS: tuple[str, ...] = ("command", "url", "target", "host", "ip", "options", "code", "path")
+    #: ``content`` is included to catch editor tool writes — if an out-of-scope
+    #: URL is embedded in a script being written to disk, the write is blocked
+    #: before the file is created (write-time interception).
+    _SCAN_FIELDS: tuple[str, ...] = ("command", "url", "target", "host", "ip", "options", "code", "path", "content")
 
     def __init__(
         self,
