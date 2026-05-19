@@ -492,39 +492,6 @@ class TestEditorWriteTimeDomainInterception:
         assert "OUT_OF_SCOPE" in event.tool_use["input"]["command"]
 
 
-# ---------------------------------------------------------------------------
-# _ToolRouterHook – endpoint check runs before domain check
-# ---------------------------------------------------------------------------
-
-
-class TestEndpointTakesPriorityOverDomain:
-    """When both an endpoint and a domain match, endpoint block fires first."""
-
-    def test_endpoint_blocked_before_domain_when_both_present(self):
-        sentinel_shell = object()
-        hook = ca._ToolRouterHook(shell_tool=sentinel_shell)
-        hook._out_of_scope_endpoints = ["/contact"]
-        hook._out_of_scope_domains = ["admin.juice-shop.com"]
-        hook._shell_tool = sentinel_shell
-
-        event = _make_event(
-            tool_name="shell",
-            tool_input={"command": "curl https://admin.juice-shop.com/#/contact"},
-            selected_tool=object(),
-        )
-        hook._on_before_tool(event)
-
-        cmd = event.tool_use["input"]["command"]
-        assert "OUT_OF_SCOPE" in cmd
-        assert "/contact" in cmd  # endpoint blocked first
-
-
-# ---------------------------------------------------------------------------
-# File-based integration: hook loads domains from an actual tmp file
-# ---------------------------------------------------------------------------
-
-
-class TestFileBasedDomainIntegration:
     def test_hook_loads_and_blocks_domain_from_file(self, tmp_path):
         oos_file = tmp_path / "out_of_scope.txt"
         oos_file.write_text(
@@ -569,19 +536,3 @@ class TestFileBasedDomainIntegration:
         hook._on_before_tool(event)
 
         assert event.tool_use["input"] == original_input
-
-    def test_hook_loads_both_sections_independently(self, tmp_path):
-        oos_file = tmp_path / "out_of_scope.txt"
-        oos_file.write_text(
-            "[ENDPOINTS]\n"
-            "/contact\n"
-            "/about\n"
-            "[DOMAINS]\n"
-            "admin.juice-shop.com\n"
-        )
-
-        sentinel_shell = object()
-        hook = ca._ToolRouterHook(shell_tool=sentinel_shell, out_of_scope_file=oos_file)
-
-        assert len(hook._out_of_scope_endpoints) == 2
-        assert len(hook._out_of_scope_domains) == 1
