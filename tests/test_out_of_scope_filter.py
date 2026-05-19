@@ -31,7 +31,7 @@ SAMPLE_ENDPOINTS = [
     "/photo-wall",
 ]
 
-# Minimal valid file content with section headers for use in tmp-file tests
+# Minimal valid file content with section header for use in tmp-file tests
 _OOS_FILE_CONTENT = (
     "# comment\n"
     "\n"
@@ -39,9 +39,6 @@ _OOS_FILE_CONTENT = (
     "/contact\n"
     "  /about  \n"
     "/photo-wall\n"
-    "\n"
-    "[DOMAINS]\n"
-    "admin.juice-shop.com\n"
 )
 
 
@@ -50,7 +47,6 @@ def _make_hook(endpoints: list[str] | None = None) -> ca._ToolRouterHook:
     sentinel_shell = object()
     hook = ca._ToolRouterHook(shell_tool=sentinel_shell)
     hook._out_of_scope_endpoints = endpoints if endpoints is not None else list(SAMPLE_ENDPOINTS)
-    hook._out_of_scope_domains = []
     hook._shell_tool = sentinel_shell
     return hook
 
@@ -81,12 +77,6 @@ class TestParseOosSection:
         f.write_text(_OOS_FILE_CONTENT)
         result = ca._parse_oos_section(f, "ENDPOINTS")
         assert result == ["/contact", "/about", "/photo-wall"]
-
-    def test_parses_domains_section(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text(_OOS_FILE_CONTENT)
-        result = ca._parse_oos_section(f, "DOMAINS")
-        assert result == ["admin.juice-shop.com"]
 
     def test_unknown_section_returns_empty(self, tmp_path):
         f = tmp_path / "oos.txt"
@@ -141,18 +131,6 @@ class TestLoadOutOfScopeEndpoints:
         f = tmp_path / "oos.txt"
         f.write_text("")
         assert ca._load_out_of_scope_endpoints(f) == []
-
-    def test_does_not_bleed_into_domains_section(self, tmp_path):
-        f = tmp_path / "oos.txt"
-        f.write_text(
-            "[ENDPOINTS]\n"
-            "/contact\n"
-            "[DOMAINS]\n"
-            "admin.juice-shop.com\n"
-        )
-        result = ca._load_out_of_scope_endpoints(f)
-        assert result == ["/contact"]
-        assert "admin.juice-shop.com" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -571,8 +549,6 @@ class TestFileBasedEndpointIntegration:
             "/contact\n"
             "/about\n"
             "/photo-wall\n"
-            "[DOMAINS]\n"
-            "admin.juice-shop.com\n"
         )
 
         sentinel_shell = object()
