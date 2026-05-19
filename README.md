@@ -135,8 +135,8 @@ Responsible for:
 
 | Layer | Enforcement Type | Level |
 |---|---|---|
-| Endpoint Enforcement | Tool Call Validation | Application Level |
-| Domain/Subdomain Enforcement | Tool Call Validation | Application Level |
+| Endpoints Enforcement | Tool Call Validation | Application Level |
+| Domains/Subdomains Enforcement | Tool Call Validation | Application Level |
 | Firewall Enforcement | Network Restrictions | Infrastructure Level |
 
 ---
@@ -230,8 +230,8 @@ Used for:
 - Test Case 3
 
 This setup evaluates:
-- Endpoint scope enforcement
-- Domain/subdomain scope enforcement
+- Endpoints scope enforcement
+- Domains/subdomains scope enforcement
 
 Each mechanism is tested independently.
 
@@ -275,11 +275,7 @@ bkimminich/juice-shop
 
 #### Start Simulated Subdomain
 
-Run this command from inside:
-
-```bash
-experimental setup and firewall
-```
+Run this command from inside the `experimental setup and firewall` folder.
 
 IMPORTANT:
 Do NOT run this command from inside the `dev-page` folder.
@@ -296,11 +292,7 @@ nginx:alpine
 
 #### Start NGINX Proxy
 
-Run this command from inside:
-
-```bash
-experimental setup and firewall
-```
+Run this command from inside the `experimental setup and firewall` folder:
 
 ```bash
 docker run -d \
@@ -330,7 +322,7 @@ The codebase in this branch contains:
 
 The codebase does NOT contain:
 - Domain/subdomain scope enforcement
-- Firewall layered implementation
+- Firewall scope enforcement implementation
 
 After checking out the correct branch, build the project from inside the project root folder:
 
@@ -368,11 +360,11 @@ git checkout domains_and_subdomains_scope_enforcement_only
 ```
 
 The codebase in this branch contains:
-- Domain/subdomain scope enforcement implementation only
+- Domains/subdomains scope enforcement implementation only
 
 The codebase does NOT contain:
 - Endpoint scope enforcement
-- Firewall layered implementation
+- Firewall scope enforcement implementation
 
 After checking out the correct branch, build the project from inside the project root folder:
 
@@ -408,7 +400,7 @@ Used for:
 
 This setup evaluates:
 - Firewall enforcement individually
-- Full layered enforcement approach
+- Full layered scope enforcement framework
 
 ---
 
@@ -441,11 +433,7 @@ bkimminich/juice-shop
 
 ### Start Simulated Subdomain
 
-Run from inside:
-
-```bash
-experimental setup and firewall
-```
+Run this command from inside the `experimental setup and firewall` folder:
 
 ```bash
 docker run -d \
@@ -529,7 +517,7 @@ networks:
 
 ### Start DVPWA
 
-Run from inside the DVPWA project folder.
+Run from inside the DVPWA main project folder.
 
 ```bash
 docker compose up --build
@@ -539,11 +527,7 @@ docker compose up --build
 
 ## Firewall Execution
 
-Run from inside:
-
-```bash
-experimental setup and firewall
-```
+Run from inside the `experimental setup and firewall` folder.
 
 ---
 
@@ -600,9 +584,9 @@ cyber-autoagent
 ## Test Case 5 — Full Layered Enforcement
 
 For this test case, the user must build the latest project version containing:
-- Endpoint scope enforcement
-- Domain/subdomain scope enforcement
-- Firewall enforcement
+- Endpoints scope enforcement
+- Domains/subdomains scope enforcement
+- Firewall scope enforcement
 
 This represents the complete layered scope enforcement framework.
 
@@ -657,7 +641,7 @@ docs/
 
 ---
 
-## Restarting the GUI
+## Restarting the GUI (ONLY IF NEEDED)
 
 Inside the container:
 
@@ -671,8 +655,8 @@ node /app/src/modules/interfaces/react/dist/index.js
 
 | Layer | Supported OS |
 |---|---|
-| Endpoint Enforcement | Any OS |
-| Domain/Subdomain Enforcement | Any OS |
+| Endpoints Enforcement | Any OS |
+| Domains/Subdomains Enforcement | Any OS |
 | Firewall Enforcement | Linux Only |
 
 ---
@@ -693,8 +677,8 @@ The evaluation of the framework consists of five separate test cases:
 | Test Case | Purpose |
 |---|---|
 | Test Case 1 | Baseline system using only prompt-based enforcement |
-| Test Case 2 | Endpoint scope enforcement evaluation |
-| Test Case 3 | Domain/subdomain scope enforcement evaluation |
+| Test Case 2 | Endpoints scope enforcement evaluation |
+| Test Case 3 | Domains/subdomains scope enforcement evaluation |
 | Test Case 4 | Firewall enforcement evaluation |
 | Test Case 5 | Full layered scope enforcement evaluation |
 
@@ -704,7 +688,7 @@ The evaluation of the framework consists of five separate test cases:
 
 The project also includes dedicated unit tests for the application-level scope enforcement implementations.
 
-### Endpoint Scope Enforcement Unit Tests
+### Endpoints Scope Enforcement Unit Tests
 
 ```bash
 test_out_of_scope_filter.py
@@ -717,7 +701,7 @@ Tests:
 
 ---
 
-### Domain/Subdomain Scope Enforcement Unit Tests
+### Domains/Subdomains Scope Enforcement Unit Tests
 
 ```bash
 test_out_of_scope_domains_filter.py
@@ -741,8 +725,8 @@ Tests:
 The evaluation demonstrated:
 
 - Prompt-only enforcement is unreliable
-- Endpoint enforcement blocks restricted routes
-- Domain enforcement blocks restricted subdomains
+- Endpoints enforcement blocks restricted routes
+- Domains/Subdomains enforcement blocks restricted domains and subdomains
 - Firewall enforcement blocks unauthorised external systems
 - Combining all layers provides significantly stronger scope control
 
