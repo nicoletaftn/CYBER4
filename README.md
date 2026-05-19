@@ -190,14 +190,18 @@ bkimminich/juice-shop
 
 #### Build Cyber-AutoAgent
 
-Run from inside the main project folder.
-
-```bash
-docker build -t cyber-autoagent -f docker/Dockerfile .
-```
-
 > IMPORTANT:
-> For Setup 1 / Test Case 1, the original Cyber-AutoAgent version must be used without any of the layered scope enforcement implementations.
+> For Setup 1 / Test Case 1, the original Cyber-AutoAgent project must be used without any of the layered scope enforcement implementations from this repository.
+>
+> Clone the original project from:
+>
+> https://github.com/westonbrown/Cyber-AutoAgent
+>
+> Then build the original version from inside the original Cyber-AutoAgent project folder using:
+>
+> ```bash
+> docker build -t cyber-autoagent -f docker/Dockerfile .
+> ```
 
 ---
 
@@ -311,26 +315,30 @@ nginx:alpine
 
 ---
 
-#### Build Cyber-AutoAgent
+### Test Case 2 — Endpoint Enforcement Only
 
-Run from inside the project root folder.
+For this test case, the user must switch to the branch containing ONLY the endpoint scope enforcement implementation.
+
+Checkout the branch:
+
+```bash
+git checkout endpoints_scope_enforcement_only
+```
+
+The codebase in this branch contains:
+- Endpoint scope enforcement implementation only
+
+The codebase does NOT contain:
+- Domain/subdomain scope enforcement
+- Firewall layered implementation
+
+After checking out the correct branch, build the project from inside the project root folder:
 
 ```bash
 docker build -t cyber-autoagent -f docker/Dockerfile .
 ```
 
 ---
-
-### Test Case 2 — Endpoint Enforcement Only
-
-For this test case, the user must build the project version containing ONLY the endpoint scope enforcement implementation.
-
-The codebase used for building must:
-- Include the endpoint scope enforcement implementation
-- NOT include the domains/subdomains scope enforcement implementation
-- NOT include the firewall enforcement implementation
-
-This means the user must switch the codebase to the appropriate implementation stage before building.
 
 #### Run
 
@@ -351,14 +359,28 @@ cyber-autoagent
 
 ### Test Case 3 — Domain/Subdomain Enforcement Only
 
-For this test case, the user must build the project version containing ONLY the domain/subdomain scope enforcement implementation.
+For this test case, the user must switch to the branch containing ONLY the domain/subdomain scope enforcement implementation.
 
-The codebase used for building must:
-- Include the domains/subdomains scope enforcement implementation
-- NOT include the endpoint scope enforcement implementation
-- NOT include the firewall enforcement implementation
+Checkout the branch:
 
-This means the user must switch the codebase to the appropriate implementation stage before building.
+```bash
+git checkout domains_and_subdomains_scope_enforcement_only
+```
+
+The codebase in this branch contains:
+- Domain/subdomain scope enforcement implementation only
+
+The codebase does NOT contain:
+- Endpoint scope enforcement
+- Firewall layered implementation
+
+After checking out the correct branch, build the project from inside the project root folder:
+
+```bash
+docker build -t cyber-autoagent -f docker/Dockerfile .
+```
+
+---
 
 #### Run
 
@@ -544,16 +566,13 @@ chmod +x firewall-loop.sh
 
 ## Test Case 4 — Firewall Enforcement Only
 
-For this test case, the user must build the ORIGINAL Cyber-AutoAgent version.
+For this test case, the original Cyber-AutoAgent project must be used without any of the layered scope enforcement implementations from this repository.
 
-The codebase used for building must:
-- NOT include endpoint scope enforcement
-- NOT include domains/subdomains scope enforcement
-- NOT include firewall-related application-level modifications
+Clone the original project from:
 
-The firewall itself is executed externally through the firewall scripts.
+https://github.com/westonbrown/Cyber-AutoAgent
 
-#### Build
+Then build the original version from inside the original Cyber-AutoAgent project folder using:
 
 ```bash
 docker build -t cyber-autoagent -f docker/Dockerfile .
