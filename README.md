@@ -1,6 +1,6 @@
 # Scope-Aware Cyber-AutoAgent
 
-Layered Scope Enforcement Framework for Autonomous AI-Based Web Penetration Testing built on top of Cyber-AutoAgent.
+Layered Scope Enforcement Framework for Autonomous Agentic AI Black-box Web Penetration Testing built on top of Cyber-AutoAgent.
 
 This project extends the original [Cyber-AutoAgent](https://github.com/westonbrown/Cyber-AutoAgent) system with deterministic scope enforcement mechanisms designed to constrain autonomous AI-based penetration testing systems within predefined operational boundaries.
 
