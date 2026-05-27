@@ -243,7 +243,7 @@ This setup is the base environment for all test cases. Test Cases 3 and 4 additi
 
 ### Setup Diagram
 
-<img width="720" height="370" alt="Second Setup" src="https://github.com/user-attachments/assets/795fd255-195a-4ffc-bfa0-121727f81034" />
+<img width="625" height="454" alt="Second Setup copy" src="https://github.com/user-attachments/assets/f9a57837-51fc-4b97-8a2d-abc31733235f" />
 
 ---
 
@@ -418,7 +418,13 @@ cyber-autoagent
 
 ## Test Case 3 — Firewall Enforcement Only
 
-This test case uses Setup 2 as the base environment, plus the Firewall Execution steps below.
+This test case uses Setup 2 as the base environment, plus the Firewall Execution steps below. As shown in the following diagrams:
+
+<img width="814" height="545" alt="Final Setup " src="https://github.com/user-attachments/assets/89d6b8eb-c021-4ead-b003-c5cf9dc40da7" />
+
+---
+
+<img width="717" height="494" alt="Firewall Functionality Illustrated copy" src="https://github.com/user-attachments/assets/07c85412-d54f-461f-8cbd-83a5d5cb9a99" />
 
 The project version without any of the layered scope enforcement implementations must be used.
 
