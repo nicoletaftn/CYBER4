@@ -2,8 +2,8 @@
 #
 # List one entry per line under the appropriate section header.
 # Partial matches are supported — the filter performs a substring match, so
-# "/contact" blocks any tool-call input containing that string
-# (e.g. http://localhost:3000/#/contact), and "dev.juice-shop" blocks
+# "/score-board" blocks any tool-call input containing that string
+# (e.g. http://localhost:3000/#/score-board), and "dev.juice-shop" blocks
 # any input referencing that hostname.
 #
 # Lines starting with '#' and blank lines are ignored.
@@ -15,9 +15,6 @@
 # URL paths/page routes that must not be tested.
 
 # ── Customer / UI pages ───────────────────────────────────────────────────────
-/contact
-/about
-/photo-wall
 /robots.txt
 /ftp
 /score-board
