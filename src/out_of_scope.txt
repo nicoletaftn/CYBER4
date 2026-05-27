@@ -12,9 +12,6 @@
 # URL paths/page routes that must not be tested.
 
 # ── Customer / UI pages ───────────────────────────────────────────────────────
-/contact
-/about
-/photo-wall
 /robots.txt
 /ftp
 /score-board
