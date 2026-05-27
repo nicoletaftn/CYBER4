@@ -81,6 +81,10 @@ def specialized_recon_orchestrator(target: str, recon_type: str = "comprehensive
                 output += f"  {i}. {subdomain}\\n"
             if len(subdomains) > 10:
                 output += f"  ... and {len(subdomains) - 10} more\\n"
+            if subdomains:
+                output += "\\nACTION REQUIRED: Each discovered subdomain above is a separate live host.\\n"
+                output += "You MUST send an http_request to EVERY subdomain in the list before concluding recon.\\n"
+                output += "Do NOT stop after investigating just one — test all of them.\\n"
             output += "\\n"
 
         # Phase 3: Live host detection and technology fingerprinting
@@ -251,8 +255,63 @@ def _advanced_subdomain_enum(target: str) -> List[str]:
     except Exception:
         pass
 
-    return sorted(list(all_subdomains))
+    # Method 5: Virtual host / local network discovery
+    # Probes common subdomain prefixes directly via HTTP and via Host header injection.
+    # Works for both local/containerised environments and real-world virtual hosting.
+    try:
+        import socket
+        common_prefixes = [
+            "dev", "staging", "test", "api", "admin", "internal",
+            "beta", "demo", "portal", "app", "dashboard", "vpn",
+            "mail", "ftp", "cdn", "static", "assets", "media",
+        ]
 
+        # Resolve target IP (works for Docker hostnames too)
+        try:
+            target_ip = socket.gethostbyname(target)
+        except Exception:
+            target_ip = None
+
+        for prefix in common_prefixes:
+            candidate = f"{prefix}.{target}"
+
+            # Try direct hostname resolution first (Docker / local DNS)
+            try:
+                socket.gethostbyname(candidate)
+                # If resolved, probe it
+                for port in [80, 443, 3000, 8080, 8443]:
+                    protocol = "https" if port in [443, 8443] else "http"
+                    url = f"{protocol}://{candidate}:{port}"
+                    cmd = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                           "--max-time", "3", "--connect-timeout", "2", url]
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    if r.stdout.strip() not in ("", "000"):
+                        all_subdomains.add(candidate)
+                        break
+            except socket.gaierror:
+                pass
+
+            # Try Host header injection against the resolved IP (virtual hosting)
+            if target_ip:
+                for port in [80, 443, 3000, 8080]:
+                    protocol = "https" if port in [443, 8443] else "http"
+                    url = f"{protocol}://{target_ip}:{port}"
+                    cmd = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                           "--max-time", "3", "--connect-timeout", "2",
+                           "-H", f"Host: {candidate}", url]
+                    try:
+                        r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                        code = r.stdout.strip()
+                        if code not in ("", "000", "404"):
+                            all_subdomains.add(candidate)
+                            break
+                    except Exception:
+                        pass
+
+    except Exception:
+        pass
+
+    return list(all_subdomains)
 
 def _analyze_live_hosts(hosts: List[str]) -> Dict[str, Any]:
     """Analyze live hosts and identify technologies"""
