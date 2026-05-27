@@ -28,17 +28,17 @@ The implemented framework applies enforcement at two different abstraction level
 
 Validates tool-generated actions before execution.
 
-#### Endpoint-Level Enforcement
+#### Endpoints-Level Enforcement
 
 Blocks access to specific out-of-scope application routes.
 
 Examples:
-- `/contact`
-- `/about`
-- `/ftp`
 - `/robots.txt`
+- `/ftp`
+- `/score-board`
+- `api/Challenges`
 
-#### Domain/Subdomain Enforcement
+#### Domains/Subdomains Enforcement
 
 Blocks access to restricted domains or subdomains.
 
@@ -57,7 +57,7 @@ Restricts outbound communication to explicitly authorised targets only.
 
 This prevents:
 - Access to external systems
-- Access to unrelated vulnerable applications
+- Access to unrelated systems outside the defined testing scope(e.g. Juice Crew web application)
 - Communication with random internet targets
 
 ---
@@ -72,7 +72,7 @@ This prevents:
 
 ### Core Scope Enforcement Implementation
 
-#### Endpoint & Domain/Subdomain Enforcement
+#### Endpoints & Domains/Subdomains Enforcement
 
 Main implementation located in:
 
@@ -103,9 +103,9 @@ Example:
 
 ```txt
 [ENDPOINTS]
-/contact
+/score-board
 /ftp
-/robots.txt
+/api/Challenges
 
 [DOMAINS]
 dev.juice-shop
@@ -143,17 +143,17 @@ Responsible for:
 
 ## Experimental Setups
 
-The project includes three experimental setups used throughout the evaluation.
+The project includes two experimental setups used throughout the evaluation.
 
 ---
 
-## Setup 1 — Baseline System (Prompt-Based Enforcement Only)
+## Setup 1 — Baseline System (Prompt-Based Scope Control Only)
 
 Used for:
 
-- Test Case 1
+- Initial Experiment/Demonstration
 - Baseline behaviour evaluation
-- No deterministic scope enforcement
+- No deterministic scope enforcement implemented
 
 ### Architecture
 
@@ -191,13 +191,9 @@ bkimminich/juice-shop
 #### Build Cyber-AutoAgent
 
 > IMPORTANT:
-> For Setup 1 / Test Case 1, the original Cyber-AutoAgent project must be used without any of the layered scope enforcement implementations from this repository.
+> For Setup 1 / Initial Experiment, the project version without any of the layered scope enforcement implementations  must be used.
 >
-> Clone the original project from:
->
-> https://github.com/westonbrown/Cyber-AutoAgent
->
-> Then build the original version from inside the original Cyber-AutoAgent project folder using:
+> Checkout the `original` branch of this repository, then build from inside the project folder using:
 >
 > ```bash
 > docker build -t cyber-autoagent -f docker/Dockerfile .
@@ -226,23 +222,22 @@ cyber-autoagent
 
 Used for:
 
+- Test Case 1
 - Test Case 2
 - Test Case 3
+- Test Case 4
 
-This setup evaluates:
-- Endpoints scope enforcement
-- Domains/subdomains scope enforcement
-
-Each mechanism is tested independently.
+This setup is the base environment for all test cases. Test Cases 3 and 4 additionally require the Firewall Execution steps described further below.
 
 ---
 
 ### Architecture
 
 - Cyber-AutoAgent
-- OWASP Juice Shop
+- Modified OWASP Juice Shop
 - Simulated subdomain
 - NGINX reverse proxy
+- Juice Crew web application
 
 ---
 
@@ -262,13 +257,23 @@ docker network create cyber-net
 
 ---
 
-#### Start OWASP Juice Shop
+#### Build and Start Modified OWASP Juice Shop
+
+Clone the repository and build the image from inside the project folder:
+
+```bash
+git clone https://github.com/nicoletaftn/Modified-OWASP-Juice-Shop-Web-Application.git
+cd Modified-OWASP-Juice-Shop-Web-Application
+docker build -t juice-shop -f Dockerfile .
+```
+
+Then start the container:
 
 ```bash
 docker run -d \
 --name juice \
 --network cyber-net \
-bkimminich/juice-shop
+juice-shop
 ```
 
 ---
@@ -307,9 +312,29 @@ nginx:alpine
 
 ---
 
-### Test Case 2 — Endpoint Enforcement Only
+#### Start Juice Crew Web Application
 
-For this test case, the user must switch to the branch containing ONLY the endpoint scope enforcement implementation.
+Clone the repository, then run the command from inside the `people-page` folder:
+
+```bash
+git clone https://github.com/nicoletaftn/Juice-Crew.git
+cd Juice-Crew/people-page
+```
+
+```bash
+docker run -d \
+--name people-page \
+--network cyber-net \
+-p 8081:80 \
+-v "$(pwd):/usr/share/nginx/html:ro" \
+nginx:alpine
+```
+
+---
+
+### Test Case 1 — Endpoints Enforcement Only
+
+For this test case, the user must switch to the branch containing ONLY the endpoints scope enforcement implementation.
 
 Checkout the branch:
 
@@ -318,10 +343,10 @@ git checkout endpoints_scope_enforcement_only
 ```
 
 The codebase in this branch contains:
-- Endpoint scope enforcement implementation only
+- Endpoints scope enforcement implementation only
 
 The codebase does NOT contain:
-- Domain/subdomain scope enforcement
+- Domains/subdomains scope enforcement
 - Firewall scope enforcement implementation
 
 After checking out the correct branch, build the project from inside the project root folder:
@@ -349,9 +374,9 @@ cyber-autoagent
 
 ---
 
-### Test Case 3 — Domain/Subdomain Enforcement Only
+### Test Case 2 — Domains/Subdomains Enforcement Only
 
-For this test case, the user must switch to the branch containing ONLY the domain/subdomain scope enforcement implementation.
+For this test case, the user must switch to the branch containing ONLY the domains/subdomains scope enforcement implementation.
 
 Checkout the branch:
 
@@ -363,7 +388,7 @@ The codebase in this branch contains:
 - Domains/subdomains scope enforcement implementation only
 
 The codebase does NOT contain:
-- Endpoint scope enforcement
+- Endpoints scope enforcement
 - Firewall scope enforcement implementation
 
 After checking out the correct branch, build the project from inside the project root folder:
@@ -391,136 +416,33 @@ cyber-autoagent
 
 ---
 
-## Setup 3 — Firewall & Layered Enforcement
+## Test Case 3 — Firewall Enforcement Only
 
-Used for:
+This test case uses Setup 2 as the base environment, plus the Firewall Execution steps below.
 
-- Test Case 4
-- Test Case 5
+The project version without any of the layered scope enforcement implementations must be used.
 
-This setup evaluates:
-- Firewall enforcement individually
-- Full layered scope enforcement framework
-
----
-
-### Setup Diagram
-
-<img width="720" height="400" alt="Final Setup" src="https://github.com/user-attachments/assets/071ac62f-04b5-4a35-af98-45912785c401" />
-
----
-
-## Setup Commands
-
-### Create Docker Network
+Checkout the `original` branch of this repository, then build from inside the project folder using:
 
 ```bash
-docker network create cyber-net
+docker build -t cyber-autoagent -f docker/Dockerfile .
 ```
 
 ---
 
-### Start OWASP Juice Shop
+#### Run
+
+The user must replace the AWS Bedrock credentials below with their own valid AWS credentials.
 
 ```bash
-docker run -d \
---name juice \
+docker run -it \
+--name cyber-agent-original \
 --network cyber-net \
-bkimminich/juice-shop
-```
-
----
-
-### Start Simulated Subdomain
-
-Run this command from inside the `experimental setup and firewall` folder:
-
-```bash
-docker run -d \
---name dev-page \
---network cyber-net \
--v "$(pwd)/dev-page:/usr/share/nginx/html:ro" \
-nginx:alpine
-```
-
----
-
-### Start NGINX Proxy
-
-```bash
-docker run -d \
---name proxy \
---network cyber-net \
---network-alias juice-shop \
---network-alias dev.juice-shop \
--p 3000:3000 \
--v "$(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
-nginx:alpine
-```
-
----
-
-## DVPWA Setup
-
-Clone:
-
-```bash
-https://github.com/anxolerd/dvpwa
-```
-
-Replace the docker compose file with:
-
-```yaml
-version: "3.3"
-
-services:
-  postgres:
-    build:
-      context: .
-      dockerfile: Dockerfile.db
-    ports:
-      - "5432:5432"
-    networks:
-      cyber-net:
-        aliases:
-          - postgres
-
-  redis:
-    image: redis:alpine
-    networks:
-      cyber-net:
-        aliases:
-          - redis
-
-  sqli:
-    build:
-      context: .
-      dockerfile: Dockerfile.app
-    depends_on:
-      - postgres
-      - redis
-    ports:
-      - "8080:8080"
-    command: >
-      wait-for postgres:5432 -- python run.py
-    networks:
-      cyber-net:
-        aliases:
-          - sqli
-
-networks:
-  cyber-net:
-    external: true
-```
-
----
-
-### Start DVPWA
-
-Run from inside the DVPWA main project folder.
-
-```bash
-docker compose up --build
+-e AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
+-e AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY \
+-e AWS_REGION=us-east-1 \
+-e NODE_OPTIONS="--max-old-space-size=4096" \
+cyber-autoagent
 ```
 
 ---
@@ -548,40 +470,16 @@ chmod +x firewall-loop.sh
 
 ---
 
-## Test Case 4 — Firewall Enforcement Only
+## Test Case 4 — Full Layered Enforcement
 
-For this test case, the original Cyber-AutoAgent project must be used without any of the layered scope enforcement implementations from this repository.
+This test case uses Setup 2 as the base environment, plus the Firewall Execution steps above.
 
-Clone the original project from:
-
-https://github.com/westonbrown/Cyber-AutoAgent
-
-Then build the original version from inside the original Cyber-AutoAgent project folder using:
-
-```bash
-docker build -t cyber-autoagent -f docker/Dockerfile .
-```
-
----
-
-#### Run
-
-The user must replace the AWS Bedrock credentials below with their own valid AWS credentials.
-
-```bash
-docker run -it \
---name cyber-agent-original \
---network cyber-net \
--e AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
--e AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY \
--e AWS_REGION=us-east-1 \
--e NODE_OPTIONS="--max-old-space-size=4096" \
-cyber-autoagent
-```
-
----
-
-## Test Case 5 — Full Layered Enforcement
+> IMPORTANT:
+> Before running the firewall, open `firewall.sh` and update line 4 to match the container name used in this test case:
+>
+> ```bash
+> AGENT="cyber-agent-layered"
+> ```
 
 For this test case, the user must build the latest project version containing:
 - Endpoints scope enforcement
@@ -615,7 +513,7 @@ cyber-autoagent
 
 ---
 
-## AWS Bedrock Configuration
+## AWS Bedrock Model Configuration
 
 After the system starts:
 
@@ -665,22 +563,22 @@ node /app/src/modules/interfaces/react/dist/index.js
 
 | Test Cases | Operating System |
 |---|---|
-| Test Cases 1–3 | macOS |
-| Test Cases 4–5 | Linux |
+| Initial Experiment, Test Cases 1–2 | macOS |
+| Test Cases 3–4 | Linux |
 
 ---
 
 ## Evaluation Test Cases
 
-The evaluation of the framework consists of five separate test cases:
+The evaluation of the framework consists of an initial experiment and four separate test cases:
 
 | Test Case | Purpose |
 |---|---|
-| Test Case 1 | Baseline system using only prompt-based enforcement |
-| Test Case 2 | Endpoints scope enforcement evaluation |
-| Test Case 3 | Domains/subdomains scope enforcement evaluation |
-| Test Case 4 | Firewall enforcement evaluation |
-| Test Case 5 | Full layered scope enforcement evaluation |
+| Initial Experiment/Demonstration | Baseline system using only prompt-based scope control |
+| Test Case 1 | Endpoints scope enforcement evaluation |
+| Test Case 2 | Domains/subdomains scope enforcement evaluation |
+| Test Case 3 | Firewall enforcement evaluation |
+| Test Case 4 | Full layered scope enforcement evaluation |
 
 ---
 
@@ -724,7 +622,7 @@ Tests:
 
 The evaluation demonstrated:
 
-- Prompt-only enforcement is unreliable
+- Prompt-only scope control is unreliable
 - Endpoints enforcement blocks restricted routes
 - Domains/Subdomains enforcement blocks restricted domains and subdomains
 - Firewall enforcement blocks unauthorised external systems
